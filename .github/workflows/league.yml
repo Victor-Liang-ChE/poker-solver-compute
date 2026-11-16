@@ -1,13 +1,13 @@
 # Runs the 100 bb heads-up Bot Arena league on 20 free runners, one part each, against the stored hu-sb-bb flop library,
-# which each job downloads from the public R2 library. Run: gh workflow run league.yml -f deals=1000 -f seed=1
+# which each job downloads from the public R2 library. Run: gh workflow run league.yml -f deals=60 -f seed=1
 name: league
 on:
   workflow_dispatch:
     inputs:
       deals:
-        description: Deals per part
+        description: Deals per part (each part plays all six pairs on its own deals; 60 is about 50 min)
         required: true
-        default: "1000"
+        default: "60"
       seed:
         description: Seed
         required: true
