@@ -10,6 +10,7 @@ on:
         default: co-bb
 permissions:
   contents: read
+  actions: read
 jobs:
   part:
     runs-on: ubuntu-latest
@@ -40,3 +41,12 @@ jobs:
           path: out/${{ inputs.spot }}/*.pfl
           retention-days: 7
           compression-level: 0
+  upload:
+    # After every part has finished (or failed), upload what was solved to R2. Stops with a notice until the R2 secrets exist.
+    needs: part
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/r2-upload.yml
+    with:
+      spot: ${{ inputs.spot }}
+      run_id: ${{ github.run_id }}
+    secrets: inherit
