@@ -1,0 +1,43 @@
+# Runs the 100 bb heads-up Bot Arena league on 20 free runners, one part each, against the stored hu-sb-bb flop library,
+# which each job downloads from the public R2 library. Run: gh workflow run league.yml -f deals=1000 -f seed=1
+name: league
+on:
+  workflow_dispatch:
+    inputs:
+      deals:
+        description: Deals per part
+        required: true
+        default: "1000"
+      seed:
+        description: Seed
+        required: true
+        default: "1"
+permissions:
+  contents: read
+jobs:
+  part:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download the hu-sb-bb library
+        run: |
+          mkdir -p lib/hu-sb-bb
+          # The bucket serves the records brotli-encoded; save the raw .pfl bytes (no decompression by curl).
+          xargs -P 16 -I{} curl -sfS --retry 5 -H 'Accept-Encoding: br' -o lib/hu-sb-bb/{}.pfl \
+            https://pub-1576b12eb0ce4b1296c21d1996c3daa9.r2.dev/v2/hu-sb-bb/{}.pfl < all-flops.txt
+          n=$(ls lib/hu-sb-bb | wc -l); echo "$n flops"; test "$n" -eq 1755
+      - name: Play this part
+        run: node --max-old-space-size=4096 run-league.mjs --library lib --deals "${{ inputs.deals }}" --seed "${{ inputs.seed }}" --part "${{ matrix.part }}/20" --out league-part-${{ matrix.part }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: league-part-${{ matrix.part }}
+          path: league-part-${{ matrix.part }}.json
+          retention-days: 7

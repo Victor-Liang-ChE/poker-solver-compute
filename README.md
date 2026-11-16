@@ -4,3 +4,5 @@ Batch solver for the stored heads-up flop library of the postflop solver page. `
 self-contained build of `scripts/poker/postflop-library/solve-flops.ts` from the site repo. Each run of the
 `solve` workflow solves every strategically different flop of one spot on 20 runners and keeps one artifact
 per part with the compressed flop records.
+
+`run-league.mjs` is a build of `scripts/poker/arena/run-league.ts`; the `league` workflow runs the Bot Arena league on 20 runners against the hu-sb-bb library in R2.
