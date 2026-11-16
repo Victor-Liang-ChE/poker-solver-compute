@@ -1,0 +1,33 @@
+# Solves one spot of the stored flop library across 20 free runners, one part each.
+# Run it from the Actions tab (Run workflow) or: gh workflow run solve.yml -f spot=co-bb
+name: solve
+on:
+  workflow_dispatch:
+    inputs:
+      spot:
+        description: Spot id (btn-bb, co-bb, hj-bb, utg-bb, sb-bb)
+        required: true
+        default: co-bb
+permissions:
+  contents: read
+jobs:
+  part:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Solve this part
+        run: node --max-old-space-size=4096 solve-flops.mjs --spot "${{ inputs.spot }}" --out out --workers "$(nproc)" --part "${{ matrix.part }}/20" --strict 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.spot }}-part-${{ matrix.part }}
+          path: out/${{ inputs.spot }}/*.pfl
+          retention-days: 7
+          compression-level: 0
