@@ -1,0 +1,39 @@
+# Three-way preflop all-in equity table: 40 parts, two side by side on each of 20 free runners (one core per part).
+# three-way-equity.mjs is scripts/poker/generate-three-way-equity.ts from the site repo (commit 6afddcea1c) bundled with esbuild.
+# Run: gh workflow run equity.yml -f trials=1000000
+name: equity
+on:
+  workflow_dispatch:
+    inputs:
+      trials:
+        description: Monte Carlo trials per hand-class triple
+        required: true
+        default: "1000000"
+permissions:
+  contents: read
+jobs:
+  runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Parts ${{ matrix.runner }} and ${{ matrix.runner }}+20 of 40
+        run: |
+          A=${{ matrix.runner }}; B=$((A + 20))
+          node --max-old-space-size=4096 three-way-equity.mjs ${{ inputs.trials }} $A 40 & PA=$!
+          node --max-old-space-size=4096 three-way-equity.mjs ${{ inputs.trials }} $B 40 & PB=$!
+          wait $PA && wait $PB
+          ls -la .local-artifacts/poker-three-way-equity
+      - uses: actions/upload-artifact@v4
+        with:
+          name: equity-runner-${{ matrix.runner }}
+          path: .local-artifacts/poker-three-way-equity/*.bin
+          include-hidden-files: true
+          retention-days: 7
