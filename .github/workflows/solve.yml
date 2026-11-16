@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       spot:
-        description: Spot id (btn-bb, co-bb, hj-bb, utg-bb, sb-bb)
+        description: Spot id (btn-bb, co-bb, hj-bb, utg-bb, sb-bb, btn-bb-3bet, btn-sb-3bet, co-btn-3bet, sb-bb-3bet)
         required: true
         default: co-bb
 permissions:
@@ -24,7 +24,16 @@ jobs:
         with:
           node-version: 22
       - name: Solve this part
-        run: node --max-old-space-size=4096 solve-flops.mjs --spot "${{ inputs.spot }}" --out out --workers "$(nproc)" --part "${{ matrix.part }}/20" --strict 1
+        # If todo/<spot>.txt exists (one flop per line, e.g. 2c2d3c), this part solves every 20th listed flop instead.
+        run: |
+          SPOT="${{ inputs.spot }}"; PART="${{ matrix.part }}"
+          if [ -f "todo/$SPOT.txt" ]; then
+            ONLY=$(awk -v p="$PART" 'NF && (NR-1) % 20 == p' "todo/$SPOT.txt" | paste -sd, -)
+            if [ -z "$ONLY" ]; then echo "nothing to solve in this part"; exit 0; fi
+            node --max-old-space-size=4096 solve-flops.mjs --spot "$SPOT" --out out --workers "$(nproc)" --only "$ONLY"
+          else
+            node --max-old-space-size=4096 solve-flops.mjs --spot "$SPOT" --out out --workers "$(nproc)" --part "$PART/20" --strict 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.spot }}-part-${{ matrix.part }}
