@@ -1,11 +1,11 @@
-// ../../../private/tmp/pf-src2/scripts/poker/postflop-library/solve-flops.ts
+// ../../../private/tmp/pf-src5/scripts/poker/postflop-library/solve-flops.ts
 import { fork } from "node:child_process";
 import { mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
 
-// ../../../private/tmp/pf-src2/src/lib/poker-preflop/default-solution.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-preflop/default-solution.ts
 var DEFAULT_SOLUTION = {
   "config": { "tableSize": 6, "stack": 100, "openSize": 2.5, "sbOpenSize": 3, "oop3betMultiple": 4, "realization": 0.8, "realizationCurve": 1.3, "pushFold": false },
   "shape": [2, 2, 2, 2, 2, 4, 4, 3, 2, 2, 2, 3, 4, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 3, 3, 4, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 3, 3, 3, 4, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 3, 3, 3, 3, 4, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2, 4, 3, 2, 2, 2],
@@ -14,8 +14,12 @@ var DEFAULT_SOLUTION = {
   "final": { "iteration": 2250, "nashDistance": 17928680520593043e-20, "seatGains": [5473920497459095e-20, 252327193002444e-19, 11621673745326744e-21, 468584917542314e-19, 153193866682666e-19, 2551532876327034e-20], "seatEv": [0.12389392848852736, 0.1548046668765787, 0.1996638303623028, 0.26235432952268467, -0.27313543369660553, -0.46758132155348714] }
 };
 
-// ../../../private/tmp/pf-src2/src/lib/poker-preflop/tree.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-preflop/tree.ts
 var SEAT_NAMES = {
+  10: ["UTG", "UTG+1", "UTG+2", "UTG+3", "LJ", "HJ", "CO", "BTN", "SB", "BB"],
+  9: ["UTG", "UTG+1", "UTG+2", "LJ", "HJ", "CO", "BTN", "SB", "BB"],
+  8: ["UTG", "UTG+1", "LJ", "HJ", "CO", "BTN", "SB", "BB"],
+  7: ["UTG", "LJ", "HJ", "CO", "BTN", "SB", "BB"],
   6: ["UTG", "HJ", "CO", "BTN", "SB", "BB"],
   5: ["HJ", "CO", "BTN", "SB", "BB"],
   2: ["SB", "BB"]
@@ -40,6 +44,16 @@ function buildTree(config) {
   const sb = n - 2;
   const bb = n - 1;
   const stack = config.stack;
+  const straddle = n > 2 ? config.straddle ?? "none" : "none";
+  const straddler = straddle === "utg" ? 0 : straddle === "button" ? n - 3 : -1;
+  const order = straddle === "utg" ? [...Array.from({ length: n - 1 }, (_, k) => k + 1), 0] : straddle === "button" ? [sb, bb, ...Array.from({ length: n - 3 }, (_, k) => k), straddler] : Array.from({ length: n }, (_, k) => k);
+  const last = order[n - 1];
+  const big = straddler >= 0 ? 2 : 1;
+  const dead = new Array(n).fill(0);
+  dead[bb] = config.ante ?? 0;
+  const deadTotal = dead.reduce((sum, d) => sum + d, 0);
+  const rakeShare = config.rake ?? 0;
+  const rakeCap = config.rakeCap ?? Infinity;
   const decisions = [];
   const showdowns = [];
   const ip = (x, y) => postflopRank(n, x) > postflopRank(n, y);
@@ -50,7 +64,7 @@ function buildTree(config) {
   };
   const showdown = (a, b, contributions) => {
     const committed = contributions[a];
-    const pot = contributions.reduce((sum, c) => sum + c, 0);
+    const pot = contributions.reduce((sum, c) => sum + c, 0) + deadTotal;
     const allIn = committed >= stack - 1e-9;
     const spr = (stack - committed) / pot;
     const depth = allIn ? 0 : Math.min(1, spr / FULL_PENALTY_SPR);
@@ -61,6 +75,7 @@ function buildTree(config) {
       contributions,
       committed,
       pot,
+      rake: Math.min(rakeShare * pot, rakeCap),
       allIn,
       aInPosition: ip(a, b),
       realization: 1 - (1 - config.realization) * depth,
@@ -101,14 +116,15 @@ function buildTree(config) {
     for (const build of builders) children.push(build());
     return node;
   };
-  const facingOpen = (opener, j, contributions, line) => {
-    if (j > bb) return { kind: "fold", winner: opener, contributions };
+  const facingOpen = (opener, k, contributions, line) => {
+    if (k >= n) return { kind: "fold", winner: opener, contributions };
+    const j = order[k];
     const step = (kind, label) => [...line, { seat: j, kind, label }];
     const open = contributions[opener];
     const openIsAllIn = open >= stack - 1e-9;
     const actions = [{ kind: "fold", to: contributions[j], label: "Fold" }];
-    const builders = [() => facingOpen(opener, j + 1, contributions, line)];
-    if (j === bb || openIsAllIn) {
+    const builders = [() => facingOpen(opener, k + 1, contributions, line)];
+    if (j === last || openIsAllIn) {
       actions.push({ kind: "call", to: open, label: "Call" });
       builders.push(() => showdown(opener, j, withBet(contributions, j, open)));
     }
@@ -126,20 +142,21 @@ function buildTree(config) {
     for (const build of builders) node.children.push(build());
     return node;
   };
-  const openNode = (i, contributions) => {
-    if (i === bb) return { kind: "fold", winner: bb, contributions };
+  const openNode = (k, contributions) => {
+    const i = order[k];
+    if (i === last) return { kind: "fold", winner: last, contributions };
     const actions = [{ kind: "fold", to: contributions[i], label: "Fold" }];
-    const builders = [() => openNode(i + 1, contributions)];
+    const builders = [() => openNode(k + 1, contributions)];
     if (!config.pushFold) {
-      const size = i === sb && n > 2 ? config.sbOpenSize : config.openSize;
+      const size = big * (i === sb && n > 2 ? config.sbOpenSize : config.openSize);
       if (size <= MAX_RAISE_SHARE * stack) {
         actions.push({ kind: "raise", to: size, label: `Raise ${fmtBb(size)}bb` });
-        builders.push(() => facingOpen(i, i + 1, withBet(contributions, i, size), [{ seat: i, kind: "raise", label: "open" }]));
+        builders.push(() => facingOpen(i, k + 1, withBet(contributions, i, size), [{ seat: i, kind: "raise", label: "open" }]));
       }
     }
     if (config.pushFold || stack <= OPEN_JAM_MAX_STACK) {
       actions.push({ kind: "allin", to: stack, label: "Jam" });
-      builders.push(() => facingOpen(i, i + 1, withBet(contributions, i, stack), [{ seat: i, kind: "allin", label: "jam" }]));
+      builders.push(() => facingOpen(i, k + 1, withBet(contributions, i, stack), [{ seat: i, kind: "allin", label: "jam" }]));
     }
     const node = decision(i, `${seats[i]} first in`, "open", contributions, actions, [], []);
     for (const build of builders) node.children.push(build());
@@ -148,9 +165,10 @@ function buildTree(config) {
   const blinds = new Array(n).fill(0);
   blinds[sb] = 0.5;
   blinds[bb] = 1;
+  if (straddler >= 0) blinds[straddler] = 2;
   const root = openNode(0, blinds);
   disambiguateSpots(decisions);
-  return { config, seats, root, decisions, showdowns };
+  return { config, seats, root, decisions, showdowns, dead, order };
 }
 function disambiguateSpots(decisions) {
   const counts = /* @__PURE__ */ new Map();
@@ -162,7 +180,7 @@ function disambiguateSpots(decisions) {
   }
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker-preflop/hands.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-preflop/hands.ts
 var HAND_COUNT = 169;
 var TOTAL_COMBOS = 1326;
 var COMBOS_AFTER_ONE_HAND = 1225;
@@ -208,7 +226,7 @@ var OPPONENT_GIVEN_HAND = (() => {
   return weights;
 })();
 
-// ../../../private/tmp/pf-src2/src/lib/poker-preflop/solution.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-preflop/solution.ts
 function decodeStrategy(tree, bytes) {
   let offset = 0;
   return tree.decisions.map((node) => {
@@ -229,33 +247,55 @@ function base64ToBytes(text) {
   return new Uint8Array(Buffer.from(text, "base64"));
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/presets.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/presets.ts
 var SPOT_PRESETS = [
-  { id: "btn-bb", opener: "BTN", label: "BTN opens, BB calls", openerInPosition: true, pot: 5.5, stack: 97.5 },
-  { id: "co-bb", opener: "CO", label: "CO opens, BB calls", openerInPosition: true, pot: 5.5, stack: 97.5 },
-  { id: "hj-bb", opener: "HJ", label: "HJ opens, BB calls", openerInPosition: true, pot: 5.5, stack: 97.5 },
-  { id: "utg-bb", opener: "UTG", label: "UTG opens, BB calls", openerInPosition: true, pot: 5.5, stack: 97.5 },
-  { id: "sb-bb", opener: "SB", label: "SB opens, BB calls", openerInPosition: false, pot: 6, stack: 97 }
+  { id: "btn-bb", opener: "BTN", label: "BTN opens, BB calls", players: ["BB", "BTN"], noDonk: true, pot: 5.5, stack: 97.5 },
+  { id: "co-bb", opener: "CO", label: "CO opens, BB calls", players: ["BB", "CO"], noDonk: true, pot: 5.5, stack: 97.5 },
+  { id: "hj-bb", opener: "HJ", label: "HJ opens, BB calls", players: ["BB", "HJ"], noDonk: true, pot: 5.5, stack: 97.5 },
+  { id: "utg-bb", opener: "UTG", label: "UTG opens, BB calls", players: ["BB", "UTG"], noDonk: true, pot: 5.5, stack: 97.5 },
+  { id: "sb-bb", opener: "SB", label: "SB opens, BB calls", players: ["SB", "BB"], noDonk: false, pot: 6, stack: 97 },
+  // 3-bet pots: out-of-position 3-bets are 4x the open, in-position ones 3x (the preflop solver's sizes).
+  { id: "btn-bb-3bet", opener: "BTN", threeBettor: "BB", label: "BB 3-bets BTN, BTN calls", players: ["BB", "BTN"], noDonk: false, pot: 20.5, stack: 90 },
+  { id: "btn-sb-3bet", opener: "BTN", threeBettor: "SB", label: "SB 3-bets BTN, BTN calls", players: ["SB", "BTN"], noDonk: false, pot: 21, stack: 90 },
+  { id: "co-btn-3bet", opener: "CO", threeBettor: "BTN", label: "BTN 3-bets CO, CO calls", players: ["CO", "BTN"], noDonk: true, pot: 16.5, stack: 92.5 },
+  { id: "sb-bb-3bet", opener: "SB", threeBettor: "BB", label: "BB 3-bets SB, SB calls", players: ["SB", "BB"], noDonk: true, pot: 18, stack: 91 }
 ];
 function findNode(tree, spot) {
   return tree.decisions.find((node) => node.spot === spot) ?? null;
 }
 function presetRanges(tree, strategy, preset) {
   const open = findNode(tree, `${preset.opener} first in`);
-  const defend = findNode(tree, `BB vs ${preset.opener} open`);
-  if (!open || !defend) return null;
-  const raiseIndex = open.actions.findIndex((action) => action.kind === "raise");
-  const callIndex = defend.actions.findIndex((action) => action.kind === "call");
-  if (raiseIndex < 0 || callIndex < 0) return null;
+  if (!open) return null;
+  const share = (node, kind, hand) => {
+    const index = node.actions.findIndex((action) => action.kind === kind);
+    return index < 0 ? -1 : strategy[node.id][hand * node.actions.length + index];
+  };
   const opener = new Float64Array(HAND_COUNT);
-  const caller = new Float64Array(HAND_COUNT);
-  const openStrategy = strategy[open.id];
-  const defendStrategy = strategy[defend.id];
-  for (let hand = 0; hand < HAND_COUNT; hand += 1) {
-    opener[hand] = roundWeight(openStrategy[hand * open.actions.length + raiseIndex]);
-    caller[hand] = roundWeight(defendStrategy[hand * defend.actions.length + callIndex]);
+  const other = new Float64Array(HAND_COUNT);
+  if (preset.threeBettor) {
+    const threeBet = findNode(tree, `${preset.threeBettor} vs ${preset.opener} open`);
+    const call = findNode(tree, `${preset.opener} vs ${preset.threeBettor} 3-bet`);
+    if (!threeBet || !call) return null;
+    for (let hand = 0; hand < HAND_COUNT; hand += 1) {
+      const a = share(open, "raise", hand);
+      const b = share(call, "call", hand);
+      const c = share(threeBet, "raise", hand);
+      if (a < 0 || b < 0 || c < 0) return null;
+      opener[hand] = roundWeight(a * b);
+      other[hand] = roundWeight(c);
+    }
+  } else {
+    const defend = findNode(tree, `BB vs ${preset.opener} open`);
+    if (!defend) return null;
+    for (let hand = 0; hand < HAND_COUNT; hand += 1) {
+      const a = share(open, "raise", hand);
+      const b = share(defend, "call", hand);
+      if (a < 0 || b < 0) return null;
+      opener[hand] = roundWeight(a);
+      other[hand] = roundWeight(b);
+    }
   }
-  return preset.openerInPosition ? [caller, opener] : [opener, caller];
+  return preset.players[0] === preset.opener ? [opener, other] : [other, opener];
 }
 function roundWeight(value) {
   const rounded = Math.round(value * 20) / 20;
@@ -272,7 +312,7 @@ function sizesFor(plan, noDonk) {
   return [oop, ip];
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker/cards.ts
+// ../../../private/tmp/pf-src5/src/lib/poker/cards.ts
 var RANK_CHARS = "23456789TJQKA";
 var SUIT_CHARS = "cdhs";
 var rankOf = (card) => card >> 2;
@@ -288,15 +328,15 @@ function choose(n, k) {
   return Math.round(result);
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker/hand-keys.ts
+// ../../../private/tmp/pf-src5/src/lib/poker/hand-keys.ts
 var RANK_KEYS = [0, 1, 5, 22, 98, 453, 2031, 8698, 22854, 83661, 262349, 636345, 1479181];
 var HASH_SHIFT = 11;
 
-// ../../../private/tmp/pf-src2/src/lib/poker/hand-hash-offsets.generated.ts
+// ../../../private/tmp/pf-src5/src/lib/poker/hand-hash-offsets.generated.ts
 var HASH_TABLE_SIZE = 134098;
 var HASH_OFFSETS = new Int32Array([0, 2048, 26994, 90430, 3613, 17699, 70753, 122268, 30641, 62881, 116295, 5294, 12198, 43178, 98771, 20330, 56656, 91870, 14824, 15402, 111061, 87186, 29611, 52290, 96674, 52939, 21870, 111538, 30209, 4250, 9205, 56242, 20608, 86630, 116681, 69218, 8370, 50494, 6350, 8376, 45985, 10415, 41434, 54568, 99082, 15785, 65715, 121629, 5719, 66030, 114599, 106469, 24840, 48341, 100466, 1465, 71901, 109482, 57616, 4971, 124613, 96033, 22451, 78241, 107530, 53513, 10187, 125088, 35173, 347, 4, 60734, 12202, 1, 125473, 83853, 6842, 43, 61276, 12389, 12, 40786, 51205, 105400, 70164, 41088, 88344, 50372, 9937, 2774, 122571, 106901, 3491, 95035, 21634, 14196, 100, 126145, 76071, 12387, 125, 107251, 22766, 10, 126573, 76712, 5558, 0, 107468, 12113, 174, 0, 22447, 1, 0, 107825, 13403, 15, 0, 22646, 0, 0, 93122, 112881, 80701, 22460, 31353, 45427, 6993, 22084, 72917, 48768, 23098, 49160, 99389, 49419, 92148, 101596, 10353, 25438, 53373, 97588, 45563, 72806, 95163, 13867, 6972, 60766, 64008, 6443, 85218, 119073, 70656, 939, 58690, 87573, 14026, 43, 2024, 10279, 2, 73918, 88534, 113351, 68367, 15, 10795, 28672, 4897, 34641, 91036, 6158, 776, 68556, 103423, 23722, 2549, 120116, 24941, 5742, 74281, 106214, 63267, 3776, 126150, 33727, 552, 28, 63180, 7521, 9, 126463, 88452, 7027, 214, 107223, 7956, 44, 0, 21988, 14, 0, 107596, 22728, 7, 0, 22216, 3, 0, 9601, 98310, 75373, 13581, 9754, 123157, 108936, 23553, 17, 108850, 23060, 2500, 42387, 2343, 31, 0, 109630, 13458, 2, 0, 22768, 8, 0, 110034, 13652, 157, 0, 22957, 9, 0, 0, 0, 0, 0, 23183, 173, 0, 0, 3, 0, 0, 75736, 89828, 12621, 0, 6674, 20780, 28803, 71447, 123180, 14406, 74318, 107776, 33315, 1675, 61109, 70772, 3354, 85936, 109145, 14281, 4450, 82968, 42492, 4719, 12, 7064, 20930, 96, 33528, 83332, 10996, 76, 8454, 7446, 14, 0, 0, 23728, 1, 72240, 12652, 22387, 22776, 892, 51, 22363, 5, 79080, 123672, 97084, 4336, 120668, 65166, 9098, 184, 96230, 10518, 1, 126760, 90309, 16097, 13932, 46669, 100383, 37549, 36665, 85496, 23874, 13806, 61151, 115123, 9880, 44688, 55553, 91086, 15299, 75643, 104849, 70882, 14048, 116999, 86208, 23199, 76420, 106882, 74703, 14391, 57143, 89674, 5799, 75, 97054, 31211, 11804, 123678, 78339, 8956, 19, 109629, 72125, 224, 36480, 54360, 102959, 49672, 45533, 94898, 73735, 21201, 3499, 49014, 98301, 32531, 101843, 65974, 11264, 4409, 40993, 6222, 155, 0, 98109, 23534, 22612, 50221, 15622, 190, 0, 42101, 3337, 40, 0, 2606, 75, 83369, 104235, 57557, 4336, 130591, 26911, 3793, 10, 67287, 64107, 38839, 58986, 23734, 33068, 1588, 41440, 6842, 602, 118, 37, 47558, 12119, 32573, 6965, 3118, 304, 1037, 202, 23884, 244, 25961, 3496, 28, 22441, 385, 353, 5, 0, 36, 60, 0, 119785, 70426, 23791, 31, 109860, 7434, 3, 0, 117322, 98683, 23564, 98649, 15537, 83326, 45112, 95178, 64459, 15249, 77183, 105260, 72517, 8411, 115313, 38697, 1168, 89567, 113934, 1196, 35, 127076, 11935, 5945, 20, 98861, 12622, 11, 127458, 79172, 14203, 150, 109935, 60554, 35, 0, 22830, 11815, 255, 111303, 13898, 77836, 23999, 12571, 13893, 2920, 61773, 109974, 72269, 8583, 19551, 58763, 1171, 40, 3, 99674, 14214, 6210, 81883, 16069, 329, 0, 111893, 9959, 264, 0, 23576, 110, 2910, 1031, 115, 0, 0, 4932, 165, 0, 0, 0, 178, 129524, 58633, 13841, 3, 80080, 7894, 59, 0, 11699, 20634, 23278, 42695, 20947, 357, 0, 2132, 94, 24365, 2, 87730, 8620, 2, 22922, 533, 128, 0, 3, 0, 37, 0, 2166, 313, 0, 0, 0, 141, 0, 0, 0, 0, 0, 100867, 23993, 281, 0, 23561, 15, 0, 0, 100788, 23996, 46, 23940, 8402, 10080, 94651, 54311, 15698, 204, 127511, 77278, 14365, 104, 100754, 14012, 4, 127986, 80203, 14975, 285, 111437, 9465, 138, 0, 23659, 1, 0, 111699, 14733, 7, 0, 23938, 14672, 240, 0, 0, 73, 0, 24165, 23, 24570, 13, 0, 255, 10, 25181, 14675, 8015, 4, 1, 112593, 8907, 0, 0, 24498, 299, 8325, 17607, 114, 39985, 63314, 113958, 94798, 17556, 110137, 73479, 13482, 2013, 28195, 1640, 19124, 112190, 95884, 13301, 18171, 82933, 16158, 315, 0, 101828, 24894, 16886, 64511, 4439, 26, 396, 36630, 269, 6, 0, 6930, 143, 8374, 17992, 153, 590, 0, 6418, 24, 0, 81634, 121416, 101694, 24561, 119232, 59582, 24077, 0, 24687, 5531, 9, 129609, 101646, 17863, 52, 92009, 13633, 39, 0, 2044, 121, 0, 93592, 13927, 33, 0, 4648, 6115, 5, 0, 0, 141, 0, 118203, 64898, 175, 0, 112290, 10550, 312, 0, 118116, 102765, 24892, 95362, 16207, 14489, 77, 24274, 14041, 2, 0, 102901, 14632, 258, 24460, 14370, 0, 0, 7, 8507, 19145, 69879, 115746, 31707, 59315, 115635, 86293, 96031, 101072, 65839, 37842, 61999, 69184, 50557, 13201, 111523, 35672, 3039, 6989, 72959, 788, 84189, 109334, 68438, 12866, 2081, 58199, 101227, 64123, 14184, 70471, 702, 44347, 18450, 16395, 75688, 1012, 35423, 45534, 16844, 27945, 60743, 51589, 37191, 66833, 115309, 43488, 14597, 55421, 25577, 558, 79220, 110483, 85768, 3864, 129684, 91299, 9677, 89, 29568, 3068, 0, 123405, 101725, 8032, 2, 11436, 118113, 78245, 24405, 951, 22870, 9633, 19076, 14631, 104, 246, 4705, 81961, 24112, 13779, 91304, 25336, 477, 8381, 123970, 112699, 15187, 4, 79087, 14884, 1, 128145, 70761, 9827, 638, 112867, 15348, 116, 0, 54845, 15799, 625, 113393, 4853, 3, 0, 24134, 95415, 24789, 391, 15611, 15141, 0, 24365, 5, 1, 0, 0, 24462, 51, 28164, 54410, 18208, 423, 25, 114575, 39087, 64509, 120098, 4300, 92787, 102735, 30058, 2614, 19112, 85078, 6226, 87795, 113900, 53970, 690, 65459, 34664, 13268, 133, 0, 114735, 11075, 8335, 74218, 19635, 2, 5077, 55127, 48835, 15112, 2, 7641, 19137, 3483, 21297, 30591, 6380, 69, 9189, 5654, 79, 82383, 121620, 67414, 1512, 119707, 79922, 3530, 2, 38564, 5324, 86, 130245, 80688, 6163, 137, 95929, 9890, 29, 0, 4684, 14, 2, 113893, 24226, 94, 0, 23788, 102670, 24424, 8, 0, 14888, 0, 24001, 1, 21, 0, 7, 24124, 0, 0, 50802, 104856, 82481, 4742, 60466, 51543, 15933, 82, 85250, 9980, 0, 107050, 22364, 4752, 264, 87074, 15686, 160, 0, 142, 405, 0, 88606, 15891, 347, 0, 15837, 15736, 178, 0, 10, 0, 0, 16069, 1, 0, 0, 0, 18, 0, 4110, 108819, 208, 125, 0, 89893, 77054, 118151, 102613, 1356, 90627, 76897, 12883, 6611, 1667, 984, 8814, 101904, 91338, 20218, 22, 12366, 21312, 728, 215, 0, 25238, 46, 16884, 5593, 1, 0, 0, 17852, 3959, 3, 0, 451, 131, 4863, 130, 1575, 10483, 328, 1455, 307, 17259, 124054, 115642, 15966, 14, 102903, 15506, 8504, 0, 5306, 138, 326, 115378, 24533, 851, 33394, 89052, 38481, 5696, 80002, 121775, 116398, 25176, 118324, 94514, 24660, 80763, 105635, 36157, 10955, 127734, 91964, 2232, 121, 27129, 15665, 15640, 124331, 91959, 7827, 6, 115878, 100550, 26176, 16987, 1844, 407, 10456, 103199, 24690, 1882, 1, 24187, 54027, 11119, 20235, 97783, 29367, 18775, 9937, 125079, 104213, 25524, 341, 60736, 17377, 4480, 19105, 4358, 71, 0, 116778, 17343, 419, 0, 17173, 7, 1, 117168, 17580, 601, 0, 24840, 45979, 25460, 693, 1, 17213, 39002, 30778, 16359, 22, 13297, 19305, 9330, 351, 107039, 36525, 3747, 55543, 8302, 9552, 270, 29, 167, 17813, 535, 13346, 16845, 315, 5160, 385, 25515, 716, 0, 2100, 168, 0, 136, 60, 700, 0, 27, 718, 251, 0, 56, 0, 466, 116764, 17598, 64, 0, 24369, 3, 648, 0, 104257, 24700, 0, 24596, 16504, 8, 81481, 125219, 117909, 18344, 124862, 83411, 17561, 263, 51002, 9995, 3, 128223, 92614, 9351, 444, 117649, 17491, 322, 0, 24322, 3, 0, 118164, 17774, 104, 0, 24607, 73202, 17991, 201, 0, 17557, 0, 24820, 2, 17856, 136, 2, 17768, 0, 12501, 75929, 9105, 348, 3, 118854, 18435, 570, 0, 17992, 49, 0, 119064, 18766, 753, 0, 25408, 231, 0, 0, 1, 0, 0, 25613, 413, 0, 0, 0, 18576, 506, 0, 0, 17, 98342, 10102, 4, 0, 5314, 358, 165, 0, 30669, 46746, 19398, 47, 554, 90324, 18850, 706, 768, 18651, 187, 5463, 53561, 19129, 131, 0, 19063, 369, 0, 0, 1, 0, 0, 19359, 550, 0, 0, 29, 809, 0, 0, 0, 0, 25086, 2, 0, 0, 0, 0, 0, 0, 17334, 10572, 1, 14, 1, 177, 128546, 119238, 25841, 89, 118764, 6950, 168, 0, 24821, 0, 665, 119477, 19027, 302, 0, 25011, 3, 886, 0, 1, 0, 0, 25221, 0, 0, 0, 0, 19007, 67, 0, 0, 1, 0, 0, 0, 18810, 0, 0, 7, 3, 0, 120352, 26220, 955, 0, 25699, 75, 0, 0, 0, 0, 0, 25906, 613, 51821, 107909, 81858, 17774, 1639, 6266, 19169, 347, 0, 105268, 25951, 15391, 85117, 17706, 81, 0, 120491, 19873, 812, 0, 25617, 295, 133, 41636, 42, 0, 0, 1118, 4951, 191, 0, 2, 19568, 570, 26017, 661, 50, 0, 141, 19951, 755, 57215, 94856, 18941, 3, 7680, 19471, 0, 0, 0, 20160, 941, 99362, 18744, 50, 0, 5520, 298, 0, 0, 0, 599, 0, 5734, 485, 0, 0, 0, 1537, 578, 0, 0, 0, 870, 121087, 19623, 468, 0, 25316, 17, 0, 0, 105264, 25610, 234, 25573, 19371, 0, 0, 0, 1, 0, 0, 25355, 19, 0, 43, 0, 0, 0, 0, 34539, 57672, 116019, 95048, 1684, 68260, 66862, 10298, 2, 121396, 153, 6954, 111813, 93088, 13124, 24936, 77545, 824, 34, 0, 122094, 26159, 3118, 72485, 19227, 11, 4, 66253, 62125, 11282, 8, 25828, 105954, 1124, 1112, 115, 25936, 438, 18801, 8135, 85, 87091, 119061, 56436, 19524, 29699, 85223, 11237, 73, 11537, 192, 177, 130679, 95950, 14624, 210, 19976, 7079, 0, 368, 0, 20231, 985, 57105, 19328, 104, 586, 5742, 10084, 19464, 2, 0, 3332, 430, 6058, 554, 0, 776, 0, 3575, 653, 0, 128769, 122395, 20078, 69, 122447, 25706, 151, 0, 19345, 0, 0, 124291, 19928, 0, 0, 25414, 25, 0, 0, 20333, 315, 0, 25866, 1, 0, 0, 1, 26022, 81, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 126084, 26917, 970, 0, 26465, 42518, 112450, 92472, 11278, 39354, 69670, 6637, 230, 0, 127003, 21050, 11763, 9179, 8245, 60, 0, 131913, 12005, 1, 0, 26587, 539, 5122, 19405, 130, 0, 0, 11278, 19969, 485, 0, 198, 26867, 826, 26963, 1574, 16, 0, 394, 27077, 339, 130172, 105230, 20393, 189, 56348, 19878, 201, 0, 614, 149, 0, 107684, 20113, 290, 762, 6281, 506, 0, 0, 0, 862, 0, 15, 687, 0, 0, 0, 19923, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 2, 0, 0, 108860, 76107, 20714, 349, 44910, 11246, 0, 0, 2800, 463, 0, 54305, 11896, 418, 0, 3630, 653, 0, 0, 0, 1024, 0, 20040, 16, 0, 0, 3, 75, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 90193, 21079, 656, 0, 20566, 43039, 85654, 20534, 11, 4, 5914, 9445, 316, 0, 26792, 255, 14907, 21535, 258, 0, 0, 26983, 128, 0, 0, 393, 0, 0, 27204, 1103, 0, 0, 536, 165, 0, 0, 0, 679, 0, 770, 0, 21738, 969, 0, 863, 450, 114099, 20967, 53, 0, 6517, 657, 637, 0, 0, 1059, 0, 25817, 14, 0, 82920, 122140, 131581, 26886, 128451, 105261, 26371, 258, 59197, 20753, 0, 130571, 93861, 3648, 441, 123242, 20944, 274, 0, 6413, 514, 6, 130973, 26268, 467, 0, 6633, 59244, 21152, 190, 0, 11535, 6, 25932, 8, 48, 0, 8, 20990, 0, 0, 129407, 106123, 27253, 428, 131475, 26741, 555, 0, 21256, 128, 0, 131729, 21961, 832, 0, 26501, 310, 0, 0, 0, 0, 0, 26707, 491, 0, 0, 1, 21872, 584, 0, 0, 62, 15615, 20756, 678, 0, 0, 27452, 253, 0, 9599, 11040, 444, 649, 219, 27240, 949, 0, 843, 428, 0, 0, 27495, 1133, 0, 1033, 619, 0, 0, 0, 1126, 0, 0, 802, 0, 0, 0, 0, 893, 0, 0, 0, 0, 26319, 1, 0, 0, 0, 0, 0, 0, 26172, 2, 0, 0, 0, 1257, 129049, 131595, 27155, 689, 126419, 11871, 172, 0, 6601, 646, 0, 131359, 26826, 594, 0, 26322, 1, 0, 0, 12, 0, 0, 26575, 14, 0, 0, 0, 21411, 111, 0, 0, 1, 0, 0, 0, 42, 0, 0, 10, 0, 0, 132011, 27553, 1e3, 0, 27054, 486, 0, 0, 13, 0, 0, 27244, 669, 0, 0, 147, 0, 0, 0, 0, 0, 0, 328, 0, 0, 0, 0, 421, 0, 0, 0, 0, 6502, 463, 0, 0, 0, 1021, 0, 0, 0, 91651, 22424, 1146, 1206, 21942, 663, 0, 0, 144, 0, 0, 22196, 848, 0, 0, 326, 0, 0, 0, 0, 0, 0, 507, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 0, 0, 0, 0, 762, 241, 0, 0, 0, 961, 131536, 27089, 559, 0, 26593, 40, 1147, 0, 5, 0, 0, 26781, 230, 0, 0, 3, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 27432, 884, 0, 0, 362, 0, 0, 0, 0, 0, 0, 550, 0, 1796, 49449, 20622, 436, 0, 132092, 27640, 1092, 0, 27143, 570, 0, 132420, 22607, 1279, 0, 27333, 779, 0, 0, 260, 0, 0, 27529, 964, 0, 0, 452, 22397, 1066, 0, 0, 544, 0, 641, 0, 0, 0, 0, 733, 0, 17646, 21699, 727, 0, 0, 28021, 1441, 0, 0, 922, 0, 4, 276, 0, 0, 0, 1103, 0, 0, 0, 0, 0, 0, 1296, 0, 0, 0, 0, 1388, 0, 0, 0, 0, 27041, 477, 0, 0, 1, 0, 0, 0, 26880, 274, 0, 172, 4, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 26064, 98211, 55687, 11666, 79, 129908, 106641, 231, 0, 132122, 27731, 14407, 79302, 9706, 112, 0, 132337, 22511, 1262, 0, 27443, 743, 581, 132591, 22715, 1448, 0, 27694, 106638, 28370, 1542, 407, 27854, 1022, 27976, 1114, 506, 0, 597, 28073, 1211, 113305, 93863, 11986, 393, 11912, 21795, 593, 0, 0, 22660, 1399, 11079, 3140, 13, 967, 0, 28475, 1584, 0, 0, 1064, 0, 6524, 431, 0, 0, 0, 3566, 529, 0, 0, 0, 1335, 0, 1426, 0, 0, 0, 0, 1518, 0, 131857, 27592, 700, 0, 27102, 178, 0, 0, 14, 0, 0, 27293, 364, 0, 0, 1, 0, 0, 0, 351, 0, 0, 28, 0, 0, 0, 0, 119, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27953, 1009, 0, 0, 487, 22809, 80596, 21818, 614, 0, 132636, 22689, 1444, 0, 27910, 922, 0, 132866, 22862, 1627, 0, 28108, 1105, 0, 0, 585, 0, 0, 28296, 1293, 0, 0, 774, 28394, 1389, 0, 0, 870, 0, 961, 0, 1327, 0, 0, 1058, 0, 126229, 21657, 240, 0, 726, 250, 0, 0, 0, 1246, 0, 6725, 562, 0, 0, 0, 1428, 0, 0, 0, 0, 0, 0, 1609, 0, 0, 0, 70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 68126, 12024, 373, 0, 3659, 513, 0, 0, 0, 1379, 0, 4225, 696, 0, 0, 0, 1560, 0, 0, 0, 0, 0, 109, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 22148, 672, 0, 0, 150, 423, 221, 265, 0, 0, 28248, 244, 0, 0, 750, 0, 0, 28463, 1462, 0, 0, 946, 0, 0, 0, 0, 0, 0, 1127, 0, 0, 0, 0, 1221, 0, 0, 0, 0, 0, 0, 0, 987, 0, 0, 0, 0, 7065, 695, 0, 0, 0, 1592, 0, 0, 0, 0, 0, 107, 0, 0, 130518, 106029, 27841, 789, 35606, 11899, 268, 0, 925, 239, 0, 127783, 22009, 297, 0, 7018, 551, 0, 0, 0, 1454, 0, 7734, 735, 0, 0, 0, 11946, 200, 0, 0, 0, 1726, 157, 0, 0, 0, 0, 0, 0, 0, 132284, 28133, 1092, 0, 27634, 570, 0, 0, 52, 0, 0, 27826, 758, 0, 0, 236, 0, 0, 0, 0, 0, 0, 420, 0, 0, 0, 0, 515, 0, 0, 0, 0, 0, 28702, 1639, 0, 0, 1124, 0, 0, 0, 28474, 1413, 0, 1307, 893, 0, 0, 0, 0, 0, 0, 1074, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1711, 0, 0, 0, 0, 132001, 22167, 622, 0, 7986, 678, 0, 0, 0, 1627, 0, 27353, 285, 0, 0, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 38, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28054, 926, 0, 0, 412, 0, 0, 0, 0, 0, 0, 593, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1473, 0, 0, 0, 0, 0, 0, 0, 22526, 1080, 0, 0, 559, 0, 0, 0, 0, 0, 0, 741, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1382, 0, 0, 0, 0, 27551, 457, 0, 0, 9, 0, 0, 0, 0, 0, 0, 117, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 751, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 132610, 28612, 1472, 0, 28146, 950, 0, 0, 433, 0, 0, 28328, 1141, 0, 0, 619, 0, 0, 0, 0, 0, 0, 801, 0, 0, 0, 0, 902, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28987, 1789, 0, 0, 1268, 0, 0, 0, 0, 0, 0, 1451, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 275, 0, 0, 0, 0, 0, 0, 0, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 130072, 133019, 29081, 0, 132527, 28574, 1375, 0, 28065, 858, 0, 132763, 22877, 1575, 0, 28414, 1054, 0, 0, 535, 0, 0, 28645, 1242, 0, 0, 729, 28765, 1344, 0, 0, 822, 0, 913, 0, 0, 0, 0, 1207, 0, 18721, 21903, 607, 0, 0, 29152, 1934, 0, 0, 1434, 0, 0, 29374, 2148, 0, 0, 1626, 0, 0, 0, 0, 0, 0, 1828, 0, 0, 0, 0, 1939, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27983, 784, 0, 0, 273, 0, 0, 0, 0, 0, 0, 454, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1095, 0, 0, 0, 0, 0, 132934, 29238, 2066, 0, 28717, 1550, 0, 0, 1035, 0, 0, 28906, 1740, 0, 0, 1221, 0, 0, 0, 0, 0, 0, 1405, 0, 0, 0, 0, 1502, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1057, 263, 0, 0, 0, 1903, 0, 0, 0, 0, 0, 0, 2091, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4352, 514, 0, 0, 0, 2047, 0, 0, 0, 0, 0, 0, 2228, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 820, 0, 0, 0, 0, 0, 29036, 1944, 0, 0, 1424, 0, 0, 0, 0, 0, 0, 1605, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2241, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36901, 11976, 914, 0, 1075, 251, 0, 0, 0, 1919, 0, 7985, 546, 0, 0, 0, 2100, 0, 0, 0, 0, 0, 0, 2281, 0, 0, 0, 0, 2372, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28375, 1211, 0, 0, 690, 0, 0, 0, 0, 0, 0, 875, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1745, 0, 0, 0, 0, 0, 0, 0, 1512, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8157, 673, 0, 0, 0, 2239, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1005, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1136, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 505, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28660, 1517, 0, 0, 1e3, 0, 0, 0, 0, 0, 0, 1184, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1820, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1312, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2105]);
 
-// ../../../private/tmp/pf-src2/src/lib/poker/hand-evaluator.ts
+// ../../../private/tmp/pf-src5/src/lib/poker/hand-evaluator.ts
 var CLASSES_PER_CATEGORY = [1277, 2860, 858, 858, 10, 1277, 156, 156, 10];
 var HAND_CLASS_COUNT = 7462;
 var CATEGORY_START = [];
@@ -470,7 +510,7 @@ for (let skipA = 0; skipA < 7; skipA += 1) for (let skipB = skipA + 1; skipB < 7
 }
 var TOTAL_HANDS = { 5: choose(52, 5), 7: choose(52, 7) };
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/config.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/config.ts
 function streetOfBoard(board) {
   if (board.length === 3) return 0;
   if (board.length === 4) return 1;
@@ -478,7 +518,7 @@ function streetOfBoard(board) {
   throw new Error("The board needs three, four or five cards.");
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/tree.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/tree.ts
 var EPS = 1e-9;
 function round(value) {
   return Math.round(value * 100) / 100;
@@ -568,7 +608,7 @@ function buildBettingTree(config, rootStreet) {
   return { templates, rootStreet };
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/game.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/game.ts
 var IDENTITY = [0, 1, 2, 3];
 function allPerms() {
   const out = [];
@@ -784,13 +824,13 @@ function buildGame(config, options = {}) {
   return { config, board, rootStreet, tree, hands, perms: PERMS, fullDeals1, deals1Positions, handPerm, deals1, deals2, deals2Base, deals2Count, boards, boardIndex, layout };
 }
 
-// ../../../private/tmp/pf-src2/src/lib/wasm/postflop-cfr.wasm.base64.ts
+// ../../../private/tmp/pf-src5/src/lib/wasm/postflop-cfr.wasm.base64.ts
 var POSTFLOP_CFR_WASM_BASE64 = "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";
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/reference-solver.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/reference-solver.ts
 var DEFAULT_DISCOUNT = { alpha: 1.5, beta: 0, gamma: 3 };
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/wasm-solver.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/wasm-solver.ts
 var compiled;
 function decodeBase64(base64) {
   const maybeBuffer = globalThis.Buffer;
@@ -1383,7 +1423,7 @@ var WasmPostflopSolver = class _WasmPostflopSolver {
   }
 };
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/library.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/library.ts
 var SUIT_PERMS = (() => {
   const out = [];
   const build = (prefix) => {
@@ -1566,7 +1606,7 @@ function flopShape(game) {
   return { decisions, roots };
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/query.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/query.ts
 var PathError = class extends Error {
 };
 function compatibleSums(game, player, reach) {
@@ -1720,7 +1760,7 @@ async function viewAt(engine, state, steps, forward) {
   return buildView(engine, current);
 }
 
-// ../../../private/tmp/pf-src2/src/lib/poker-postflop/library-build.ts
+// ../../../private/tmp/pf-src5/src/lib/poker-postflop/library-build.ts
 function symmetrize(game, player, strategy) {
   const n = game.hands[player].count;
   const board = new Set(game.board);
@@ -1767,7 +1807,7 @@ async function buildFlopRecord(game, solver, spot, step) {
   return { raw, exploitability };
 }
 
-// ../../../private/tmp/pf-src2/scripts/poker/postflop-library/solve-flops.ts
+// ../../../private/tmp/pf-src5/scripts/poker/postflop-library/solve-flops.ts
 var args = /* @__PURE__ */ new Map();
 var argv = process.argv.slice(2).filter((a) => a !== "--");
 for (let i = 0; i < argv.length; i += 2) args.set(argv[i].replace(/^--/, ""), argv[i + 1]);
@@ -1782,7 +1822,7 @@ function spotConfig(spot, board) {
   const preset = SPOT_PRESETS[index];
   if (!preset) throw new Error(`Unknown spot ${spot}`);
   const ranges = presetRanges(tree, strategy, preset);
-  return { index, config: { board, ranges, pot: preset.pot, stack: preset.stack, sizes: sizesFor(DEFAULT_SIZES, preset.openerInPosition), allIn: false, allInThreshold: 0.67, maxRaises: 1 } };
+  return { index, config: { board, ranges, pot: preset.pot, stack: preset.stack, sizes: sizesFor(DEFAULT_SIZES, preset.noDonk), allIn: false, allInThreshold: 0.67, maxRaises: 1 } };
 }
 async function solveFlop(spot, flop) {
   const { config, index } = spotConfig(spot, flop);
