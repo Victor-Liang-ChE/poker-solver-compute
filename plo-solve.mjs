@@ -1,5 +1,3 @@
-// Generated from scripts/poker/plo/solve-flops.ts in the site repo. Do not edit by hand.
-
 // scripts/poker/plo/solve-flops.ts
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { cpus } from "node:os";
@@ -1557,6 +1555,10 @@ async function main() {
   const workers = Number(args.get("workers") ?? Math.min(8, cpus().length));
   const target = Number(args.get("target") ?? 0.3) / 100;
   const maxIterations = Number(args.get("max") ?? 400);
+  const processStart = performance.now();
+  const deadline = args.has("deadline") ? Number(args.get("deadline")) * 1e3 : Infinity;
+  const keep = Number(args.get("keep") ?? 1) / 100;
+  const left = () => deadline - (performance.now() - processStart);
   const rankingPath = args.get("ranking") ?? join(dirname(fileURLToPath(import.meta.url)), "plo-rankings.json");
   const ranking = buildRanking(JSON.parse(readFileSync(existsSync(rankingPath) ? rankingPath : "public/data/poker/plo-rankings.json", "utf8")));
   let flops = canonicalFlops();
@@ -1589,16 +1591,42 @@ async function main() {
     let exploit = Infinity;
     let ev = [0, 0];
     let nextCheck = 20;
+    let iterationMs = 0;
+    let checkMs = 0;
+    let checked = -1;
+    let cutOff = false;
     while (split.iteration < maxIterations) {
+      if (left() < iterationMs + 2 * Math.max(checkMs, 2 * iterationMs) + 6e4) {
+        cutOff = true;
+        break;
+      }
+      const begin = performance.now();
       await split.run(1);
+      iterationMs = Math.max(iterationMs * 0.8, performance.now() - begin);
       if (split.iteration < nextCheck && split.iteration < maxIterations) continue;
+      const checkBegin = performance.now();
       const result = await split.exploitability();
       exploit = result.exploitability;
       ev = result.values;
+      checkMs = performance.now() - checkBegin;
+      checked = split.iteration;
       const seconds = (performance.now() - started) / 1e3;
       console.log(`${name}: iteration ${split.iteration}, exploitability ${(exploit * 100).toFixed(3)}%, ${seconds.toFixed(0)} s, rss ${gb(process.memoryUsage().rss)} GB`);
       if (exploit <= target) break;
       nextCheck = split.iteration + Math.max(10, Math.round(split.iteration * 0.25));
+    }
+    if (cutOff) {
+      if (split.iteration > 0 && checked !== split.iteration) {
+        const result = await split.exploitability();
+        exploit = result.exploitability;
+        ev = result.values;
+      }
+      if (!(exploit <= keep)) {
+        console.log(`${name}: out of time at iteration ${split.iteration}, ${(exploit * 100).toFixed(3)}% is above ${(keep * 100).toFixed(2)}%, not kept`);
+        await Promise.all(shards.map((shard) => shard.close()));
+        break;
+      }
+      console.log(`${name}: out of time at iteration ${split.iteration}, keeping it at ${(exploit * 100).toFixed(3)}%`);
     }
     const strategies = flopNodes(split.game).map((node) => split.solver.averageStrategy(node).slice());
     const record = encodePloFlopRecord(split.game, {
@@ -1614,7 +1642,9 @@ async function main() {
     renameSync(`${file}.tmp`, file);
     await Promise.all(shards.map((shard) => shard.close()));
     console.log(`${name}: done, ${(exploit * 100).toFixed(3)}% after ${split.iteration} iterations in ${((performance.now() - started) / 1e3).toFixed(0)} s, ${(compressed.length / 1024).toFixed(0)} KB`);
+    if (cutOff) break;
   }
+  process.exit(0);
 }
 if (!isMainThread) {
   const engine = new PloShardEngine(workerData.spot);

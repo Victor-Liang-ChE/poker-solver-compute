@@ -35,9 +35,10 @@ jobs:
           SPOT="${{ inputs.spot }}"; PART="${{ matrix.part }}"
           ONLY=$(awk -v p="$PART" 'NF && (NR-1) % 20 == p' "todo/plo-$SPOT.txt" | paste -sd, -)
           if [ -z "$ONLY" ]; then echo "nothing to solve in this part"; exit 0; fi
-          # A flop that is cut off by the time limit is simply not written; the next run solves it.
-          timeout "${{ inputs.minutes }}m" node --max-old-space-size=8192 plo-solve.mjs --out out --workers "$(nproc)" \
-            --only "$ONLY" --skip-url "https://pub-1576b12eb0ce4b1296c21d1996c3daa9.r2.dev/plo-v1" || echo "stopped: $?"
+          # The solver stops before the deadline; a flop it cuts off is kept only within 1% of the pot (its exploitability
+          # is stored with it), otherwise the next run solves it. The outer timeout is only a safety net.
+          timeout "$(( ${{ inputs.minutes }} + 15 ))m" node --max-old-space-size=8192 plo-solve.mjs --out out --workers "$(nproc)" \
+            --only "$ONLY" --deadline "$(( ${{ inputs.minutes }} * 60 ))" --keep 1 --skip-url "https://pub-1576b12eb0ce4b1296c21d1996c3daa9.r2.dev/plo-v1" || echo "stopped: $?"
           ls out/$SPOT 2>/dev/null | wc -l
       - uses: actions/upload-artifact@v4
         with:
