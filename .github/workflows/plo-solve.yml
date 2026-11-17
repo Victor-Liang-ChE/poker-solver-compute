@@ -1,0 +1,73 @@
+# Solves PLO 3-bet pot flops exactly for the site's PLO Solver page, on 20 free runners, then uploads the records to R2
+# (bucket postflop-library, keys plo-v1/<spot>/<flop>.plo). Each part works down its share of todo/plo-<spot>.txt (every
+# 20th flop, in priority order), skips flops already in R2, and stops cleanly before the job limit so every finished
+# flop is kept. Run it again to continue. Run from the Actions tab or: gh workflow run plo-solve.yml -f spot=bb-btn-3bet
+name: plo-solve
+on:
+  workflow_dispatch:
+    inputs:
+      spot:
+        description: PLO library spot id
+        required: true
+        default: bb-btn-3bet
+      minutes:
+        description: Minutes each part may solve before it stops and saves what it finished
+        required: true
+        default: '320'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  part:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Solve this part's flops until time runs out
+        run: |
+          SPOT="${{ inputs.spot }}"; PART="${{ matrix.part }}"
+          ONLY=$(awk -v p="$PART" 'NF && (NR-1) % 20 == p' "todo/plo-$SPOT.txt" | paste -sd, -)
+          if [ -z "$ONLY" ]; then echo "nothing to solve in this part"; exit 0; fi
+          # A flop that is cut off by the time limit is simply not written; the next run solves it.
+          timeout "${{ inputs.minutes }}m" node --max-old-space-size=8192 plo-solve.mjs --out out --workers "$(nproc)" \
+            --only "$ONLY" --skip-url "https://pub-1576b12eb0ce4b1296c21d1996c3daa9.r2.dev/plo-v1" || echo "stopped: $?"
+          ls out/$SPOT 2>/dev/null | wc -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plo-${{ inputs.spot }}-part-${{ matrix.part }}
+          path: out/${{ inputs.spot }}/*.plo
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: ignore
+  upload:
+    needs: part
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download every part's records
+        run: |
+          gh run download "${{ github.run_id }}" -R "$GITHUB_REPOSITORY" -p "plo-${{ inputs.spot }}-part-*" -D parts || true
+          mkdir -p lib && find parts -name '*.plo' -exec mv -n {} lib/ \; 2>/dev/null || true
+          echo "$(ls lib | wc -l) .plo files"
+      - name: Upload the missing ones to R2
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ]; then echo "::notice::R2 secrets not set; nothing uploaded."; exit 0; fi
+          aws s3 sync lib "s3://postflop-library/plo-v1/${{ inputs.spot }}/" --size-only --no-progress --only-show-errors \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type application/octet-stream --content-encoding br --cache-control "public, max-age=31536000, immutable"
+          n=$(aws s3 ls "s3://postflop-library/plo-v1/${{ inputs.spot }}/" --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" | wc -l)
+          echo "$n objects now under plo-v1/${{ inputs.spot }}/"
