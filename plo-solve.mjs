@@ -946,6 +946,380 @@ var PloTerminalKernel = class _PloTerminalKernel {
   }
 };
 
+// src/lib/wasm/plo-cfr.wasm.base64.ts
+var PLO_CFR_WASM_BASE64 = "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";
+
+// src/lib/poker-plo/walk-kernel.ts
+var NODE_BYTES = 56;
+var N_KIND = 0;
+var N_PLAYER = 4;
+var N_COUNT = 8;
+var N_CHILD = 12;
+var N_REGRET = 16;
+var N_SUM = 20;
+var N_A = 24;
+var N_B = 28;
+var N_C = 32;
+var N_D = 36;
+var N_F0 = 40;
+var N_F1 = 48;
+var PAGE = 65536;
+var MAX_PAGES = 65536;
+var SUMS_BYTES2 = (52 + 2704 + 22100) * 8;
+var MODES = { cfr: 0, best: 1, average: 2 };
+var compiled2;
+function decodeBase642(base64) {
+  const maybeBuffer = globalThis.Buffer;
+  if (maybeBuffer) {
+    const bytes2 = maybeBuffer.from(base64, "base64");
+    const copy = new Uint8Array(bytes2.byteLength);
+    copy.set(bytes2);
+    return copy;
+  }
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+function cfrModule() {
+  if (compiled2 !== void 0) return compiled2;
+  try {
+    compiled2 = typeof WebAssembly === "undefined" ? null : new WebAssembly.Module(decodeBase642(PLO_CFR_WASM_BASE64));
+  } catch {
+    compiled2 = null;
+  }
+  return compiled2;
+}
+var PloWalkKernel = class _PloWalkKernel {
+  constructor(module, game) {
+    this.stack = 0;
+    this.stackBytes = 0;
+    /** Subtree roots placed so far (uid), with their decision nodes, to read the scales back after a walk. */
+    this.entries = /* @__PURE__ */ new Map();
+    this.storage = [];
+    this.boards = /* @__PURE__ */ new Map();
+    this.stackNeed = [/* @__PURE__ */ new Map(), /* @__PURE__ */ new Map()];
+    this.game = game;
+    this.compact = !!game.spot.compact;
+    const { hands, nodes } = game;
+    let at = 1024;
+    const take = (bytes) => {
+      const p = at;
+      at += bytes + 15 & ~15;
+      return p;
+    };
+    const placedHands = hands.map((set) => {
+      const listLength = set.byCard.reduce((s, l) => s + l.length, 0);
+      return {
+        cards: take(set.count * 4),
+        pairs: take(set.count * 24),
+        triples: take(set.count * 16),
+        twin: take(set.count * 4),
+        start: take(53 * 4),
+        list: take(listLength * 4),
+        packed: take(set.count * 32)
+      };
+    });
+    const sums = take(SUMS_BYTES2);
+    const most = Math.max(hands[0].count, hands[1].count);
+    this.io = [take(most * 8), take(most * 8), take(most * 8)];
+    this.nodeTable = take(nodes.length * NODE_BYTES);
+    let childCount = 0;
+    for (const node of nodes) if (node.kind === "decision" || node.kind === "chance") childCount += node.children.length;
+    const childTable = take(childCount * 4);
+    const chances = nodes.filter((node) => node.kind === "chance");
+    const chancePlace = /* @__PURE__ */ new Map();
+    const mapPlace = /* @__PURE__ */ new Map();
+    for (const node of chances) {
+      const k = node.cards.length;
+      chancePlace.set(node, { cards: take(k * 4), rep: take(k * 4), slot: take(k * 4), maps: [take(k * 4), take(k * 4)] });
+      node.cards.forEach((_, i) => {
+        const perm = node.repPerm[i];
+        if (node.rep[i] === i || !perm) return;
+        for (const p of [0, 1]) {
+          const map = game.handMap(perm, p);
+          if (!mapPlace.has(map)) mapPlace.set(map, take(map.length * 4));
+        }
+      });
+    }
+    this.memory = new WebAssembly.Memory({ initial: Math.ceil(at / PAGE) + 1, maximum: MAX_PAGES });
+    const instance = new WebAssembly.Instance(module, { env: { memory: this.memory, abort: () => {
+      throw new Error("PLO walk kernel aborted");
+    } } });
+    this.exports = instance.exports;
+    this.at = at;
+    this.placedNode = new Uint8Array(nodes.length);
+    const buffer = this.memory.buffer;
+    const i32 = new Int32Array(buffer);
+    const f64 = new Float64Array(buffer);
+    hands.forEach((set, p) => {
+      const place = placedHands[p];
+      new Uint8Array(buffer, place.cards, set.count * 4).set(set.cards);
+      new Int32Array(buffer, place.pairs, set.count * 6).set(set.pairs);
+      new Int32Array(buffer, place.triples, set.count * 4).set(set.triples);
+      new Int32Array(buffer, place.twin, set.count).set(set.twin);
+      let offset = 0;
+      for (let card = 0; card < 52; card += 1) {
+        i32[place.start / 4 + card] = offset;
+        i32.set(set.byCard[card], place.list / 4 + offset);
+        offset += set.byCard[card].length;
+      }
+      i32[place.start / 4 + 52] = offset;
+      const u16 = new Uint16Array(buffer, place.packed, set.count * 16);
+      const twin = new Int32Array(buffer, place.packed, set.count * 8);
+      for (let h = 0; h < set.count; h += 1) {
+        const o = h * 16;
+        for (let c = 0; c < 4; c += 1) u16[o + c] = set.cards[h * 4 + c];
+        for (let q = 0; q < 6; q += 1) u16[o + 4 + q] = 52 + set.pairs[h * 6 + q];
+        for (let t = 0; t < 4; t += 1) u16[o + 10 + t] = 52 + 2704 + set.triples[h * 4 + t];
+        twin[h * 8 + 7] = set.twin[h];
+      }
+      this.exports.setHands(p, set.count, place.cards, place.pairs, place.triples, place.twin, place.start, place.list, place.packed);
+    });
+    for (const [map, place] of mapPlace) i32.set(map, place / 4);
+    let child = 0;
+    nodes.forEach((node, uid) => {
+      const rec = this.nodeTable + uid * NODE_BYTES;
+      const w = (field, value) => {
+        i32[(rec + field) / 4] = value;
+      };
+      if (node.kind === "decision") {
+        w(N_KIND, 0);
+        w(N_PLAYER, node.player);
+        w(N_COUNT, node.actions.length);
+        w(N_CHILD, child);
+        node.children.forEach((c, a) => {
+          i32[childTable / 4 + child + a] = c.uid;
+        });
+        child += node.children.length;
+      } else if (node.kind === "fold") {
+        w(N_KIND, 1);
+        w(N_PLAYER, node.folder);
+        f64[(rec + N_F0) / 8] = node.invested[0];
+        f64[(rec + N_F1) / 8] = node.invested[1];
+      } else if (node.kind === "showdown") {
+        w(N_KIND, 2);
+        f64[(rec + N_F0) / 8] = node.invested;
+      } else {
+        const place = chancePlace.get(node);
+        const k = node.cards.length;
+        const slotOf2 = new Int32Array(k).fill(-1);
+        let slots = 0;
+        for (let i = 0; i < k; i += 1) if (node.rep[i] === i && node.rep.some((r, j) => j !== i && r === i)) slotOf2[i] = slots++;
+        for (let i = 0; i < k; i += 1) if (node.rep[i] !== i) slotOf2[i] = slotOf2[node.rep[i]];
+        w(N_KIND, 3);
+        w(N_PLAYER, slots);
+        w(N_COUNT, k);
+        w(N_CHILD, child);
+        w(N_REGRET, place.slot);
+        w(N_A, place.cards);
+        w(N_B, place.rep);
+        w(N_C, place.maps[0]);
+        w(N_D, place.maps[1]);
+        f64[(rec + N_F0) / 8] = game.chanceFactor[52 - k];
+        i32.set(node.cards, place.cards / 4);
+        i32.set(node.rep, place.rep / 4);
+        i32.set(slotOf2, place.slot / 4);
+        for (let i = 0; i < k; i += 1) {
+          const perm = node.repPerm[i];
+          for (const p of [0, 1]) i32[place.maps[p] / 4 + i] = node.rep[i] !== i && perm ? mapPlace.get(game.handMap(perm, p)) : 0;
+        }
+        node.children.forEach((c, a) => {
+          i32[childTable / 4 + child + a] = c.uid;
+        });
+        child += node.children.length;
+      }
+    });
+    this.exports.setup(this.nodeTable, childTable, this.compact ? 1 : 0, game.spot.pot, sums);
+  }
+  /** Null when WebAssembly is unavailable or disabled. */
+  static create(game) {
+    if (globalThis.__PLO_DISABLE_WASM__) return null;
+    if (globalThis.__PLO_DISABLE_WASM_WALK__) return null;
+    const module = cfrModule();
+    if (!module) return null;
+    try {
+      return new _PloWalkKernel(module, game);
+    } catch {
+      return null;
+    }
+  }
+  /** Children of a node the walk descends into: a chance node's mirrored cards are never walked. */
+  walked(node) {
+    if (node.kind === "decision") return node.children;
+    if (node.kind === "chance") return node.children.filter((_, i) => node.rep[i] === i);
+    return [];
+  }
+  /** Scratch bytes a walk for `player` needs below `node` (the frames of assembly/plo-cfr.ts). */
+  need(node, player) {
+    const memo = this.stackNeed[player];
+    const known = memo.get(node.uid);
+    if (known !== void 0) return known;
+    const n = this.game.hands[player].count, m = this.game.hands[1 - player].count;
+    let frame = 0;
+    if (node.kind === "decision") {
+      const k = node.actions.length;
+      frame = node.player === player ? (2 * k + 1) * n * 8 : (k * m + m + n) * 8;
+    } else if (node.kind === "chance") {
+      const slots = node.cards.filter((_, i) => node.rep[i] === i && node.rep.some((r, j) => j !== i && r === i)).length;
+      frame = (2 * n + m + slots * n) * 8;
+    }
+    let deepest = 0;
+    for (const child of this.walked(node)) deepest = Math.max(deepest, this.need(child, player));
+    const total = frame + deepest;
+    memo.set(node.uid, total);
+    return total;
+  }
+  /** Places a subtree's storage and showdown orders; false when it would not fit in module memory. */
+  prepare(entry) {
+    if (this.entries.has(entry.uid)) return this.entries.get(entry.uid) !== null;
+    const decisions = [];
+    const freshNodes = [];
+    const freshBoards = /* @__PURE__ */ new Set();
+    const visit = (node) => {
+      if (node.kind === "decision") {
+        decisions.push(node);
+        if (!this.placedNode[node.uid]) freshNodes.push(node);
+      } else if (node.kind === "showdown") {
+        const ctx = node.board();
+        if (!this.boards.has(ctx)) freshBoards.add(ctx);
+      }
+      for (const child of this.walked(node)) visit(child);
+    };
+    visit(entry);
+    const align = (bytes2) => bytes2 + 15 & ~15;
+    const unit = this.compact ? 2 : 4;
+    let bytes = 0;
+    for (const node of freshNodes) bytes += 2 * align(unit * node.actions.length * this.game.hands[node.player].count);
+    for (const ctx of freshBoards) for (const p of [0, 1]) bytes += align(ctx.order[p].length * 4) + align(ctx.values[p].length * 2);
+    const stackNeed = Math.max(this.need(entry, 0), this.need(entry, 1));
+    const newStack = stackNeed > this.stackBytes ? align(stackNeed) : 0;
+    const end = this.at + bytes + newStack;
+    const pages = Math.ceil(end / PAGE);
+    if (pages > MAX_PAGES) {
+      this.entries.set(entry.uid, null);
+      return false;
+    }
+    const have = this.memory.buffer.byteLength / PAGE;
+    if (pages > have) {
+      try {
+        this.memory.grow(pages - have);
+      } catch {
+        this.entries.set(entry.uid, null);
+        return false;
+      }
+    }
+    const take = (size) => {
+      const p = this.at;
+      this.at += align(size);
+      return p;
+    };
+    const buffer = this.memory.buffer;
+    const i32 = new Int32Array(buffer);
+    const f64 = new Float64Array(buffer);
+    for (const node of freshNodes) {
+      const length = node.actions.length * this.game.hands[node.player].count;
+      const view = { node, regret: take(unit * length), sum: take(unit * length), length };
+      const hadData = node.regret.length === length;
+      const oldRegret = node.regret, oldSum = node.strategySum;
+      this.bindStorage(view, buffer);
+      if (hadData) {
+        node.regret.set(oldRegret);
+        node.strategySum.set(oldSum);
+      } else {
+        node.regretScale = 1;
+        node.sumScale = 1;
+      }
+      const rec = this.nodeTable + node.uid * NODE_BYTES;
+      i32[(rec + N_REGRET) / 4] = view.regret;
+      i32[(rec + N_SUM) / 4] = view.sum;
+      f64[(rec + N_F0) / 8] = node.regretScale;
+      f64[(rec + N_F1) / 8] = node.sumScale;
+      this.placedNode[node.uid] = 1;
+      this.storage.push(view);
+    }
+    for (const ctx of freshBoards) {
+      const view = {
+        ctx,
+        order: [take(ctx.order[0].length * 4), take(ctx.order[1].length * 4)],
+        values: [take(ctx.values[0].length * 2), take(ctx.values[1].length * 2)],
+        counts: [ctx.order[0].length, ctx.order[1].length]
+      };
+      const old = { order: ctx.order, values: ctx.values };
+      this.bindBoard(view, buffer);
+      for (const p of [0, 1]) {
+        ctx.order[p].set(old.order[p]);
+        ctx.values[p].set(old.values[p]);
+      }
+      this.boards.set(ctx, view);
+    }
+    if (newStack) {
+      this.stack = take(newStack);
+      this.stackBytes = newStack;
+    }
+    const placeShowdowns = (node) => {
+      if (node.kind === "showdown") {
+        const view = this.boards.get(node.board());
+        const rec = this.nodeTable + node.uid * NODE_BYTES;
+        i32[(rec + N_REGRET) / 4] = view.order[0];
+        i32[(rec + N_SUM) / 4] = view.values[0];
+        i32[(rec + N_A) / 4] = view.counts[0];
+        i32[(rec + N_B) / 4] = view.order[1];
+        i32[(rec + N_C) / 4] = view.values[1];
+        i32[(rec + N_D) / 4] = view.counts[1];
+      }
+      for (const child of this.walked(node)) placeShowdowns(child);
+    };
+    placeShowdowns(entry);
+    if (pages > have) this.rebind();
+    this.entries.set(entry.uid, decisions);
+    return true;
+  }
+  bindStorage(view, buffer) {
+    const { node, length } = view;
+    if (this.compact) {
+      node.regret = new Int16Array(buffer, view.regret, length);
+      node.strategySum = new Uint16Array(buffer, view.sum, length);
+    } else {
+      node.regret = new Float32Array(buffer, view.regret, length);
+      node.strategySum = new Float32Array(buffer, view.sum, length);
+    }
+  }
+  bindBoard(view, buffer) {
+    view.ctx.order = [new Int32Array(buffer, view.order[0], view.counts[0]), new Int32Array(buffer, view.order[1], view.counts[1])];
+    view.ctx.values = [new Uint16Array(buffer, view.values[0], view.counts[0]), new Uint16Array(buffer, view.values[1], view.counts[1])];
+  }
+  /** After memory grew, every earlier view is detached: point them at the new buffer. */
+  rebind() {
+    const buffer = this.memory.buffer;
+    for (const view of this.storage) this.bindStorage(view, buffer);
+    for (const view of this.boards.values()) this.bindBoard(view, buffer);
+  }
+  /**
+   * The walk below `node` (PloSolver.walk without a frontier hook), or null when the subtree does not fit and the
+   * caller should walk it in JavaScript.
+   */
+  walk(node, player, own, opp, step) {
+    if (!this.prepare(node)) return null;
+    const buffer = this.memory.buffer;
+    const [ownAt, oppAt, outAt] = this.io;
+    new Float64Array(buffer, ownAt, own.length).set(own);
+    new Float64Array(buffer, oppAt, opp.length).set(opp);
+    this.exports.run(node.uid, player, MODES[step.mode], step.positive, step.negative, step.strategyDiscount, ownAt, oppAt, outAt, this.stack);
+    if (step.mode === "cfr" && this.compact) {
+      const f64 = new Float64Array(buffer);
+      for (const d of this.entries.get(node.uid)) {
+        if (d.player !== player) continue;
+        const rec = this.nodeTable + d.uid * NODE_BYTES;
+        d.regretScale = f64[(rec + N_F0) / 8];
+        d.sumScale = f64[(rec + N_F1) / 8];
+      }
+    }
+    const count = this.game.hands[player].count;
+    return new Float64Array(buffer.slice(outAt, outAt + count * 8));
+  }
+};
+
 // src/lib/poker-plo/solver.ts
 var RemovalSums = class {
   constructor() {
@@ -999,10 +1373,15 @@ var PloSolver = class {
     this.beta = options.beta ?? 0;
     this.gamma = options.gamma ?? 3;
     this.kernel = options.wasm === false ? null : PloTerminalKernel.create(game.hands);
+    this.walker = options.wasm === false || options.wasmWalk === false ? null : PloWalkKernel.create(game);
   }
   /** Whether terminals run in WebAssembly. */
   get usesWasm() {
     return this.kernel !== null;
+  }
+  /** Whether whole walks run in WebAssembly. */
+  get usesWasmWalk() {
+    return this.walker !== null;
   }
   /** Discount factors of the next iteration. */
   nextStep() {
@@ -1068,6 +1447,9 @@ var PloSolver = class {
     if (step.frontier) {
       const answer = step.frontier(node, own, opp);
       if (answer) return answer;
+    } else if (this.walker && !step.dryRun) {
+      const values2 = this.walker.walk(node, player, own, opp, step);
+      if (values2) return values2;
     }
     if (node.kind === "fold" || node.kind === "showdown") return step.dryRun ? new Float64Array(hero.count) : this.terminal(node, player, opp);
     if (node.kind === "chance") return this.chance(node, player, own, opp, step, null);
@@ -1518,6 +1900,7 @@ var PloSplitSolver = class {
 };
 
 // scripts/poker/plo/solve-flops.ts
+if (process.env.PLO_DISABLE_WASM_WALK === "1") globalThis.__PLO_DISABLE_WASM_WALK__ = true;
 var ThreadShard = class {
   constructor(spot) {
     this.next = 0;
@@ -1602,7 +1985,9 @@ async function main() {
       }
       const begin = performance.now();
       await split.run(1);
-      iterationMs = Math.max(iterationMs * 0.8, performance.now() - begin);
+      const took = performance.now() - begin;
+      iterationMs = Math.max(iterationMs * 0.8, took);
+      if (args.has("verbose")) console.log(`${name}: iteration ${split.iteration} took ${(took / 1e3).toFixed(1)} s`);
       if (split.iteration < nextCheck && split.iteration < maxIterations) continue;
       const checkBegin = performance.now();
       const result = await split.exploitability();
