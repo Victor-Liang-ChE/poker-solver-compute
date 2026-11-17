@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       spot:
-        description: Spot id (btn-bb, co-bb, hj-bb, utg-bb, sb-bb, btn-bb-3bet, btn-sb-3bet, co-btn-3bet, sb-bb-3bet)
+        description: Spot id (btn-bb, co-bb, hj-bb, utg-bb, sb-bb, btn-bb-3bet, btn-sb-3bet, co-btn-3bet, sb-bb-3bet, co-bb-3bet, hj-bb-3bet, utg-bb-3bet, hj-co-3bet)
         required: true
         default: co-bb
 permissions:

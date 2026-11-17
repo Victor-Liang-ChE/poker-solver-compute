@@ -3,7 +3,7 @@
 # Credentials come only from the repository Actions secrets R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
 # (an R2 S3 token scoped to this bucket). Never triggered by pull_request, so forks cannot reach them. Until the secrets
 # exist the job stops with a notice and uploads nothing.
-# Run: gh workflow run r2-upload.yml -f spot=sb-bb -f run_id=<solve run id>  (solve.yml also calls it after its parts finish)
+# Run: gh workflow run r2-upload.yml -f spot=sb-bb -f run_id=<solve run id>  (or -f run_id=0 -f branch=pc-results for PC-solved records)  (solve.yml also calls it after its parts finish)
 name: r2-upload
 on:
   workflow_dispatch:
@@ -12,8 +12,12 @@ on:
         description: Spot id
         required: true
       run_id:
-        description: The solve run whose <spot>-part-* artifacts to upload
+        description: The solve run whose <spot>-part-* artifacts to upload (0 when uploading from a branch)
         required: true
+      branch:
+        description: Optional branch holding <spot>/*.pfl solved off GitHub (the PCs); used instead of run artifacts
+        required: false
+        default: ''
   workflow_call:
     inputs:
       spot:
@@ -55,8 +59,14 @@ jobs:
       - name: Download the solve run's artifacts
         if: steps.secrets.outputs.ok == 'true'
         run: |
-          gh run download "${{ inputs.run_id }}" -R "$GITHUB_REPOSITORY" -p "${{ inputs.spot }}-part-*" -D parts
-          mkdir -p lib && find parts -name '*.pfl' -exec mv -n {} lib/ \;
+          mkdir -p parts lib
+          if [ -n "${{ inputs.branch }}" ]; then
+            git clone -q --depth 1 -b "${{ inputs.branch }}" "https://github.com/$GITHUB_REPOSITORY.git" parts/branch
+            find "parts/branch/${{ inputs.spot }}" -name '*.pfl' -exec mv -n {} lib/ \;
+          else
+            gh run download "${{ inputs.run_id }}" -R "$GITHUB_REPOSITORY" -p "${{ inputs.spot }}-part-*" -D parts
+            find parts -name '*.pfl' -exec mv -n {} lib/ \;
+          fi
           echo "$(ls lib | wc -l) .pfl files"
       - name: Upload the missing ones to R2
         if: steps.secrets.outputs.ok == 'true'
